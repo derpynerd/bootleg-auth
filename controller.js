@@ -2,7 +2,7 @@
 // APIs for storing username/password combinations and authentication
 
 const express = require('express');
-const { isAuthorized, storeNewUser, setupAuthTable } = require('./helper');
+const { isAuthorized, storeNewUser, setupAuthTable } = require('./util/helper');
 
 const PORT = 3000;
 
