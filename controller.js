@@ -2,7 +2,7 @@
 // APIs for storing username/password combinations and authentication
 
 const express = require('express');
-const { isAuthorized, storeNewUser, setupAuthTable } = require('./util/helper');
+const { isAuthorized, storeNewUser, setupAuthTable, getApiKeyForUser } = require('./util/helper');
 
 const PORT = 3000;
 
@@ -28,7 +28,7 @@ app.post('/store', async (req, res) => {
     return res.status(201).json({ message: `Created user: ${username}` });
 });
 
-app.post('/authorize', async (req, res) => {
+app.post('/key', async (req, res) => {
     if (req.get('Content-Type') != "application/x-www-form-urlencoded") {
         return res.status(406).json({ error: "Request format incorrect, please use Content-Type: application/x-www-form-urlencoded" });
     }
@@ -39,10 +39,11 @@ app.post('/authorize', async (req, res) => {
     console.log("Received request to authorize user:", username);
     const error_message = await isAuthorized(username, password);
     if (error_message != null) {
-        return res.status(401).json({ authorized: false, error: error_message });
-    }
+        return res.status(401).json({ error: error_message });
+    } 
 
-    return res.status(202).json({ authorized: true });
+    const user_api_key = await getApiKeyForUser(username);
+    return res.status(202).json({ api_key: user_api_key });
 });
 
 app.listen(PORT, function (err) {
