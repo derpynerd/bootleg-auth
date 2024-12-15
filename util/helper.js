@@ -1,8 +1,41 @@
 const bcrypt = require('bcrypt');
-const { generateKey, decryptKey } = require('./key');
+const { generateKey } = require('./key');
 const { getClient } = require('./get-client');
 
-module.exports = { isAuthorized, storeNewUser, setupAuthTable, getApiKeyForUser };
+module.exports = { createNewUser, isAuthorized, setupAuthTable, getApiKeyForUser, findUserByApiKey };
+
+async function createNewUser(username, password) {
+    if (username == null || password == null ) {
+        return "null/empty username or password not allowed";
+    }
+
+    const salt_rounds = 10;
+    const pass_hash = (await bcrypt.hash(password, salt_rounds)).toString();
+
+    const client = await getClient();
+
+    if (await doesUserExist(client, username)) {
+        await client.end();
+        return `User ${username} already exists`;
+    }
+
+    const api_key_details = await generateKey(username, pass_hash);
++
+    await client.query('INSERT INTO auth_store(username, pass_hash, init_vector, api_key) VALUES($1, $2, $3, $4);',
+         [`${username}`, `${pass_hash}`, `${api_key_details.iv}`, `${api_key_details.encrypted_key}`]);
+    await client.end();
+
+    console.info(`Created and stored user ${username} in database`);
+    return null;
+}
+
+async function findUserByApiKey(api_key) {
+    const client = await getClient();
+    const username_query_result = await client.query('SELECT username FROM auth_store WHERE api_key = $1', [`${api_key}`]);
+
+    if (username_query_result.rowCount == 0) return null;
+    return username_query_result.rows[0].username;
+}
 
 async function isAuthorized(username, password) {
     const client = await getClient();
@@ -30,35 +63,13 @@ async function isAuthorized(username, password) {
 }
 
 async function getApiKeyForUser(username) {
-    const api_key_details = await generateKey(username);
-
-    // TODO: Store api_key_details.iv into DB against username
-
-    return api_key_details.encrypted_key;
-}
-
-async function storeNewUser(username, password) {
-    if (username == null || password == null ) {
-        return "null/empty username or password not allowed";
-    }
-
-    const salt_rounds = 10;
-    const pass_hash = (await bcrypt.hash(password, salt_rounds)).toString();
-
     const client = await getClient();
-
-    if (await doesUserExist(client, username)) {
-        await client.end();
-        return `User ${username} already exists`;
-    }
-
-    await client.query('INSERT INTO auth_store(username, pass_hash) VALUES($1, $2);', [`${username}`, `${pass_hash}`]);
-    await client.end();
-
-    console.info(`Stored user ${username} in database`);
-    return null;
+    const api_key_query_result = await client.query('SELECT api_key FROM auth_store WHERE username = $1', [`${username}`]);
+    
+    return api_key_query_result.rows[0].api_key;
 }
 
+/* --------------------- Helper functions --------------------- */
 async function doesUserExist(client, username) {
     const user_count = await client.query(`SELECT COUNT(username) FROM auth_store WHERE username = $1`, [`${username}`]);
 
@@ -66,21 +77,14 @@ async function doesUserExist(client, username) {
     return true; 
 }
 
-// For internal use
-async function findUserByApiKey(username, api_key) {
-
-    const iv = ""; // TODO: get iv based on username from DB
-
-    return decryptKey(api_key, iv);
-}
-
 async function setupAuthTable() {
     const client = await getClient();
     let create_auth_table_query = `
         CREATE TABLE IF NOT EXISTS auth_store(
-        username VARCHAR PRIMARY KEY, 
-        pass_hash VARCHAR NOT NULL, 
+        username VARCHAR PRIMARY KEY,
+        pass_hash VARCHAR NOT NULL,
         init_vector VARCHAR,
+        api_key VARCHAR,
         create_time TIMESTAMP NOT NULL DEFAULT current_timestamp
         );
     `;

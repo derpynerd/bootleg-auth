@@ -2,9 +2,9 @@ require('dotenv').config();
   
 module.exports = { generateKey, decryptKey };
 
-async function generateKey(username) {
-    // Base64 encode 'username:' + padding
-    let str = btoa(username.concat(":").padEnd(25, "u&3nnv0-323n,200su32")); // TODO: Improve this
+async function generateKey(username, password) {
+    // Base64 encode 'username:password' + padding
+    let str = btoa(username.concat(":" + password).padEnd(25, "u&3nnv0-323n,200su32")); // TODO: Improve this
 
     // Encode str to UintArray8 format to perform encrypt()
     const encoder = new TextEncoder();
@@ -30,13 +30,15 @@ async function generateKey(username) {
 
 async function decryptKey(encrypted_key, iv) {
 
+    const uintarr = new Uint8Array((iv.split(',')));
+  
     // Convert back to ArrayBuffer to perform decrypt()
     let encryptedBuffer = base64ToArrayBuffer(encrypted_key); 
     
     const decryptedContent = await crypto.subtle.decrypt(
         {
           name: "AES-CTR",
-          counter: iv,
+          counter: uintarr,
           length: 128,
         },
         await getKeyMaterial(),
